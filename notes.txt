@@ -1,0 +1,25 @@
+- Am I near a gas station
+- Am I stopped for long enough to gas up -- send notification
+- Accept photos of 7 seg displays
+- log raw data for analysis
+
+- Idea: SMS/MMS version
+
+A/ Set up backend
+	- Create user for database
+	- Deploy node app
+	- Express server that accepts file uploads
+	- poke file into GCS
+	- Send file to chat GPT
+		- Figure out if its gas pump or odometer
+		- Read number
+	- Store reading in database
+	- Database table
+		- user_id,
+B/ Send photo to backend
+C/ Query backend for mpg data and display in table
+
+
+
+
+
