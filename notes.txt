@@ -6,7 +6,7 @@
 - Idea: SMS/MMS version
 
 A/ Set up backend
-	- Create user for database
+<!-- 	- Create user for database
 	- Deploy node app
 	- Express server that accepts file uploads
 	- poke file into GCS
@@ -15,7 +15,11 @@ A/ Set up backend
 		- Read number
 	- Store reading in database
 	- Database table
-		- user_id,
+		- user_id, -->
+	- come up with schema
+	- set up twillio
+	- write data to db
+	- query api?
 B/ Send photo to backend
 C/ Query backend for mpg data and display in table
 
@@ -23,3 +27,68 @@ C/ Query backend for mpg data and display in table
 
 
 
+# Data model
+
+T Images
+- type: unknown, pump, odometer
+- mileage
+- gallons
+- timestamps
+- fueling id
+
+
+hdw knit images into fuelings
+
+Segments
+
+
+json out:
+
+[
+	{start, end, length, gallons, mpg}
+]
+
+
+on image:
+process to know type and number
+assign fueling:
+ - Date range query for last hour
+ - if opposite type Image exists, assign both same fueling id
+
+
+#
+ngrok http --region=us --hostname=mpg-calc.ngrok.io 8080
+
+<!--
+app.post('/upload', (req, res) => {
+	const bb = busboy({ headers: req.headers })
+	bb.on('file', (name, file, info) => {
+		const { filename, encoding, mimeType } = info
+		let fileBuffer = null
+		console.log(
+			`File [${name}]: filename: %j, encoding: %j, mimeType: %j`,
+			filename,
+			encoding,
+			mimeType
+		)
+		file.on('data', (data) => {
+			if (!fileBuffer) {
+				fileBuffer = data
+				return
+			}
+			fileBuffer = Buffer.concat([fileBuffer, data])
+		}).on('close', () => {
+			const base64Image = fileBuffer.toString('base64')
+			// lol
+		})
+	})
+	bb.on('field', (name, val, info) => {
+		console.log(`Field [${name}]: value: %j`, val)
+	})
+	bb.on('close', () => {
+		console.log('Done parsing form!')
+		res.writeHead(303, { Connection: 'close', Location: '/' })
+		res.end()
+	})
+	req.pipe(bb)
+}) -->

@@ -1,40 +1,97 @@
-const app = require('express')()
+'use strict'
+const express = require('express')
 const busboy = require('busboy')
+const axios = require('axios')
+const pg = require('pg')
+
+const pool = new pg.Pool({
+  host: 'localhost',
+  database: 'mpg_calc',
+  user: 'mpgcalc',
+  password: 'mpgcalc',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+})
+
+const imageExtractor = require('./image-extractor.js')
 
 const PORT = 8080
+
+const OPENAI_API_KEY = process.env['OPENAI_API_KEY']
+const TWILIO_ACCOUNT_SID = 'AC826d0de709f5a8b8aabd6ecc1b7d1ec6'
+const TWILIO_API_TOKEN = process.env['TWILIO_API_TOKEN']
+
+const app = express()
+
+app.use(express.json())
+app.use(express.urlencoded())
 
 app.get('/foo', (req, res) => {
 	res.write('Hiiiii')
 	res.end()
 })
 
-app.post('/upload', (req, res) => {
-	const bb = busboy({ headers: req.headers })
-	bb.on('file', (name, file, info) => {
-		const { filename, encoding, mimeType } = info
-		console.log(
-			`File [${name}]: filename: %j, encoding: %j, mimeType: %j`,
-			filename,
-			encoding,
-			mimeType
-		)
-		file.on('data', (data) => {
-			console.log(`File [${name}] got ${data.length} bytes`)
-		}).on('close', () => {
-			console.log(`File [${name}] done`)
-		})
+app.post('/webhooks/twilio', async (req, res) => {
+	// XXX filter by mime type here for "security"
+	console.log(req.body)
+	const response = await axios.request({
+		method: 'get',
+		url: req.body.MediaUrl0,
+		auth: {
+			username: TWILIO_ACCOUNT_SID,
+			password: TWILIO_API_TOKEN,
+		},
+		responseType: 'arraybuffer',
 	})
-	bb.on('field', (name, val, info) => {
-		console.log(`Field [${name}]: value: %j`, val)
-	})
-	bb.on('close', () => {
-		console.log('Done parsing form!')
-		res.writeHead(303, { Connection: 'close', Location: '/' })
-		res.end()
-	})
-	req.pipe(bb)
+	const base64Image = response.data.toString('base64')
+	const image_url = `data:image/jpeg;base64,${base64Image}`
+
+	const type = imageExtractor.ODOMETER // await imageExtractor.classify(image_url)
+	if (type == imageExtractor.ODOMETER) {
+		const mileage = 123123//await imageExtractor.extractMileage(image_url)
+		// Check to see if there are any unbound pumps
+		const rows = await pool.query("SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL ORDER BY inserted_at desc LIMIT 1")
+		console.log(rows)
+		if (rows.rows.length == 0) {
+			// Note: insert new
+			let result = await pool.query("INSERT INTO images (class, mileage) VALUES ($1, $2)", ['odometer', mileage])
+			console.log(result)
+		} else {
+			const [{id: pump_image_id}] = rows.rows
+			// TODO txn
+			const fueling_id = crypto.randomUUID()
+			let result = await pool.query("INSERT INTO images (class, mileage, fueling_id) VALUES ($1, $2, $3)", ['odometer', mileage, fueling_id])
+			console.log(result)
+
+			result = await pool.query("UPDATE images SET fueling_id = $1 WHERE id = $2", [fueling_id, pump_image_id])
+			console.log(result)
+
+		}
+	}
+
+	if (type == imageExtractor.PUMP) {
+		const gallons = 1.234 //await imageExtractor.extractGallons(image_url)
+		// Check to see if there are any unbound odometers
+		const rows = await pool.query("SELECT id FROM images WHERE class = 'odometer' AND fueling_id IS NULL ORDER BY inserted_at desc LIMIT 1")
+		console.log(rows)
+		if (rows.rows.length == 0) {
+			// Note: insert new
+			let result = await pool.query("INSERT INTO images (class, gallons) VALUES ($1, $2)", ['pump', gallons])
+			console.log(result)
+		} else {
+			const [{id: odometer_image_id}] = rows.rows
+			// TODO txn
+			const fueling_id = crypto.randomUUID()
+			let result = await pool.query("INSERT INTO images (class, gallons, fueling_id) VALUES ($1, $2, $3)", ['pump', gallons, fueling_id])
+			console.log(result)
+
+			result = await pool.query("UPDATE images SET fueling_id = $1 WHERE id = $2", [fueling_id, odometer_image_id])
+			console.log(result)
+
+		}
+	}
 	res.status(200)
-	console.log('hi', req.headers)
 	res.end()
 })
 
