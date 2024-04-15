@@ -47,9 +47,11 @@ app.post('/webhooks/twilio', async (req, res) => {
 	const base64Image = response.data.toString('base64')
 	const image_url = `data:image/jpeg;base64,${base64Image}`
 
-	const type = imageExtractor.ODOMETER // await imageExtractor.classify(image_url)
+	const type = await imageExtractor.classify(image_url)
 	if (type == imageExtractor.ODOMETER) {
-		const mileage = 123123//await imageExtractor.extractMileage(image_url)
+		console.log("classified as odometer")
+		const mileage = await imageExtractor.extractMileage(image_url)
+		console.log("mileage", mileage)
 		// Check to see if there are any unbound pumps
 		const rows = await pool.query("SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL ORDER BY inserted_at desc LIMIT 1")
 		console.log(rows)
@@ -71,7 +73,9 @@ app.post('/webhooks/twilio', async (req, res) => {
 	}
 
 	if (type == imageExtractor.PUMP) {
-		const gallons = 1.234 //await imageExtractor.extractGallons(image_url)
+		console.log("classified as pump")
+		const gallons = await imageExtractor.extractGallons(image_url)
+		console.log("gallons", gallons)
 		// Check to see if there are any unbound odometers
 		const rows = await pool.query("SELECT id FROM images WHERE class = 'odometer' AND fueling_id IS NULL ORDER BY inserted_at desc LIMIT 1")
 		console.log(rows)
@@ -92,6 +96,12 @@ app.post('/webhooks/twilio', async (req, res) => {
 		}
 	}
 	res.status(200)
+	res.setHeader('Content-Type', 'text/html')
+	res.write(`
+		<?xml version="1.0" encoding="UTF-8"?>
+		<Response>
+		    <Message>We got your message, thank you!</Message>
+		</Response>`)
 	res.end()
 })
 
