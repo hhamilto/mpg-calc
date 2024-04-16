@@ -39,7 +39,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 				'Content-Type': 'application/json',
 			},
 			data: req.body,
-		}).catch(e => console.log("webhook forwarding error", e))
+		}).catch(e => console.log("webhook forwarding error"))
 	}
 	// XXX filter by mime type here for "security"
 	console.log(req.body)

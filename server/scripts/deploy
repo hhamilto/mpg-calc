@@ -1,10 +1,19 @@
 #! /bin/bash
 
-tar --exclude='.git' -zcvf ../server.tgz .
+# shellcheck disable=SC2164
+cd "$(dirname "$0")"
+
+cd ../../
+rm -rf server.tgz
+tar --exclude='.git' -zcvf server.tgz server
+
+# shellcheck disable=SC2103
+
 scp server.tgz root@143.198.190.93:~
 
 ssh root@143.198.190.93 << EOF
 rm server.old -rf
-mv server server.old
-tar -zxvf server.tgz server/
+mv server server.old || true
+tar -zxvf server.tgz server
+sudo systemctl restart mpg-calc.service
 EOF

@@ -1,0 +1,5 @@
+#! /bin/bash
+
+ssh root@143.198.190.93 << EOF
+sudo journalctl -u mpg-calc.service -f
+EOF
