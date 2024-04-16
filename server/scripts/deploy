@@ -1,0 +1,10 @@
+#! /bin/bash
+
+tar --exclude='.git' -zcvf ../server.tgz .
+scp server.tgz root@143.198.190.93:~
+
+ssh root@143.198.190.93 << EOF
+rm server.old -rf
+mv server server.old
+tar -zxvf server.tgz server/
+EOF

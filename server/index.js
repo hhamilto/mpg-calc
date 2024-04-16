@@ -30,17 +30,16 @@ app.get('/foo', (req, res) => {
 	res.write('Hiiiii')
 	res.end()
 })
-
 app.post('/webhooks/twilio', async (req, res) => {
-	if (!process.env.SUPRESS_WEBHOOK_FORWARDING) {
+	if (!process.env.SUPPRESS_WEBHOOK_FORWARDING) {
 		axios.request({
 			method: 'post',
-			url: 'https://https://mpg-calc.ngrok.io/webhooks/twilio',
+			url: 'https://mpg-calc.ngrok.io/webhooks/twilio',
 			headers: {
 				'Content-Type': 'application/json',
 			},
 			data: req.body,
-		})
+		}).catch(e => console.log("webhook forwarding error", e))
 	}
 	// XXX filter by mime type here for "security"
 	console.log(req.body)

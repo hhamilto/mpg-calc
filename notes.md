@@ -96,38 +96,49 @@ app.post('/upload', (req, res) => {
 fuk deploy this guy 😇
 
 # Deploy steps
-- tar the server directory:
-```
-tar -zcvf server.tgz server
-```
 
-- scp to droplet
+- run deploy script to tar and scp to server:
 ```
-scp server.tgz root@143.198.190.93:~
+./scripts/deploy
 ```
 
 - ssh into droplet
 ```
 ssh root@143.198.190.93
 ```
-- Create database on droplet
-- start tmux session
-- Set secrets in env vars
+
+- attach to tmux session
+```
+tmux a -t mpg-calc
+```
+
+- Kill the server, accept downtime
+
+/- Set secrets in env vars
 
 export DB_PASSWORD=
 export TWILIO_API_TOKEN=
 export OPENAI_API_KEY=
 
 - rename old server directory
+```
+mv server server.old
+```
+
 - untar server.tgz
-- create schema in db
-- kill old server
-- Accept downtime
+```
+tar -zxvf server.tgz server/
+```
+
+- run migrations
+
+
 - start new server
----- Reverse proxy?
+```
+(cd server && npm start)
+```
 
-- add webhook to server in twilio
-
+- YOU'RE DONE!
 
 # Dumb database stuff
 
