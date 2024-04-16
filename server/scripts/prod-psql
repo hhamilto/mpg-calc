@@ -1,0 +1,3 @@
+#! /bin/bash
+
+ssh -t root@143.198.190.93 "PGPASSWORD=$PROD_PGPASSWORD psql -h localhost mpg_calc mpgcalc"
