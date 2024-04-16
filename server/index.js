@@ -30,16 +30,19 @@ app.get('/foo', (req, res) => {
 	res.write('Hiiiii')
 	res.end()
 })
+
 app.post('/webhooks/twilio', async (req, res) => {
 	if (!process.env.SUPPRESS_WEBHOOK_FORWARDING) {
-		axios.request({
-			method: 'post',
-			url: 'https://mpg-calc.ngrok.io/webhooks/twilio',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			data: req.body,
-		}).catch(e => console.log("webhook forwarding error"))
+		axios
+			.request({
+				method: 'post',
+				url: 'https://mpg-calc.ngrok.io/webhooks/twilio',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				data: req.body,
+			})
+			.catch((e) => console.log('webhook forwarding error'))
 	}
 	// XXX filter by mime type here for "security"
 	console.log(req.body)
@@ -62,14 +65,15 @@ app.post('/webhooks/twilio', async (req, res) => {
 		console.log('mileage', mileage)
 		// Check to see if there are any unbound pumps
 		const rows = await pool.query(
-			"SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL ORDER BY inserted_at desc LIMIT 1"
+			"SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
+			[req.body.From]
 		)
 		console.log(rows)
 		if (rows.rows.length == 0) {
 			// Note: insert new
 			let result = await pool.query(
-				'INSERT INTO images (class, mileage) VALUES ($1, $2)',
-				['odometer', mileage]
+				'INSERT INTO images (class, mileage, phone_number) VALUES ($1, $2, $3)',
+				['odometer', mileage, req.body.From]
 			)
 			console.log(result)
 		} else {
@@ -77,8 +81,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 			// TODO txn
 			const fueling_id = crypto.randomUUID()
 			let result = await pool.query(
-				'INSERT INTO images (class, mileage, fueling_id) VALUES ($1, $2, $3)',
-				['odometer', mileage, fueling_id]
+				'INSERT INTO images (class, mileage, fueling_id, phone_number) VALUES ($1, $2, $3, $4)',
+				['odometer', mileage, fueling_id, req.body.From]
 			)
 			console.log(result)
 
@@ -96,14 +100,15 @@ app.post('/webhooks/twilio', async (req, res) => {
 		console.log('gallons', gallons)
 		// Check to see if there are any unbound odometers
 		const rows = await pool.query(
-			"SELECT id FROM images WHERE class = 'odometer' AND fueling_id IS NULL ORDER BY inserted_at desc LIMIT 1"
+			"SELECT id FROM images WHERE class = 'odometer' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
+			[req.body.From]
 		)
 		console.log(rows)
 		if (rows.rows.length == 0) {
 			// Note: insert new
 			let result = await pool.query(
-				'INSERT INTO images (class, gallons) VALUES ($1, $2)',
-				['pump', gallons]
+				'INSERT INTO images (class, gallons, phone_number) VALUES ($1, $2, $3)',
+				['pump', gallons, req.body.From]
 			)
 			console.log(result)
 		} else {
@@ -111,8 +116,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 			// TODO txn
 			const fueling_id = crypto.randomUUID()
 			let result = await pool.query(
-				'INSERT INTO images (class, gallons, fueling_id) VALUES ($1, $2, $3)',
-				['pump', gallons, fueling_id]
+				'INSERT INTO images (class, gallons, fueling_id, phone_number) VALUES ($1, $2, $3, $4)',
+				['pump', gallons, fueling_id, req.body.From]
 			)
 			console.log(result)
 
@@ -133,9 +138,122 @@ app.post('/webhooks/twilio', async (req, res) => {
 	res.end()
 })
 
+app.get('/:phoneNumber', async (req, res) => {
+	console.log(req.params)
+	const rows = await pool.query(
+		'SELECT id, class, mileage, gallons, inserted_at, updated_at, fueling_id, phone_number FROM images WHERE phone_number = $1 AND fueling_id IS NOT NULL',
+		['+' + req.params.phoneNumber]
+	)
+	if (rows.rows.length == 0) {
+		res.status(404)
+		res.write('Unable to find mileage for ' + req.params.phoneNumber)
+		res.end()
+		return
+	}
+	// Step 1 group into fuelings
+	const fuelingObj = {}
+	for (const image of rows.rows) {
+		if (!fuelingObj[image.fueling_id]) {
+			fuelingObj[image.fueling_id] = []
+		}
+		fuelingObj[image.fueling_id].push(image)
+	}
+	const fuelings = Object.values(fuelingObj).map(([image1, image2]) => {
+		return {
+			mileage: image1.mileage || image2.mileage,
+			gallons: image1.gallons || image2.gallons,
+			type: 'fueling',
+		}
+	})
+
+	// Step 2 Calculate segments + mpg per segment
+	const timeline = []
+	for (let i = 0; i < fuelings.length; i++) {
+		if (i == 0) {
+			timeline.push(fuelings[i])
+			continue
+		}
+		const distance = fuelings[i].mileage - fuelings[i - 1].mileage
+		const gallons = fuelings[i].gallons
+		const mpg = distance / gallons
+		timeline.push({
+			type: 'segment',
+			mpg: mpg,
+			distance: distance,
+		})
+		timeline.push(fuelings[i])
+	}
+
+	// Sorry
+	res.header('Content-Type', 'text/html')
+
+	res.write(`
+		<html>
+		<head>
+		<title> Mileage for ${req.params.phoneNumber}</title>
+		<script src="https://kit.fontawesome.com/8307bbcf03.js" crossorigin="anonymous"></script>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		</head>
+		<body>
+		<div class="m-4">
+			<i class="fa-solid fa-user"></i> ${req.params.phoneNumber} <span class="text-slate-500"> Mileage Report</span>
+		</div>
+		<div class="flex flex-col m-4 mt-6" id="timeline">`)
+
+	for (let i = 0; i < timeline.length; i++) {
+		const event = timeline[i]
+		if (i != 0) {
+			res.write(`<div class="bg-slate-200 w-1 h-12"></div>`)
+		}
+		res.write(`<div class="flex">`)
+			if (event.type == 'segment') {
+				res.write(`
+			<div class="bg-slate-200 w-1 h-12"></div>
+			`)
+			}
+
+				res.write(`
+			<div class="pr-2 flex items-center">`)
+
+		if (event.type == 'fueling') {
+			res.write(`<i class="fa-solid fa-gas-pump block"></i>`)
+		} else if (event.type == 'segment') {
+			res.write(`<i class="fa-solid fa-car pl-2 block"></i>`)
+		}
+
+		res.write(`
+			</div><div>${capitalize(event.type)}<br/>`)
+		if (event.type == 'fueling') {
+			res.write(`<span class="text-slate-500">Gallons: ${event.gallons} &bull; Odo: ${numberWithCommas(event.mileage)}</span>`)
+		} else if (event.type == 'segment') {
+			res.write(`<span class="text-slate-500">MPG: ${Math.round(event.mpg*10)/10} &bull; Distance: ${event.distance} mi</span>`)
+		}
+		res.write(`</div>
+			</div>`)
+
+	}
+
+	res.write(`
+		</div>
+		`)
+
+	res.write('</body></html>')
+	res.end()
+})
+
 app.listen(PORT, (err) => {
 	if (err) {
 		throw err
 	}
 	console.log('listening on ' + PORT)
 })
+
+
+function capitalize(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+function numberWithCommas(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
