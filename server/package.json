@@ -6,7 +6,8 @@
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"dev": "nodemon index.js",
-		"format": "prettier -w ."
+		"format": "prettier -w .",
+		"start": "node index.js"
 	},
 	"author": "",
 	"license": "ISC",

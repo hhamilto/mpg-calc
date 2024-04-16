@@ -37,8 +37,6 @@ T Images
 - fueling id
 
 
-hdw knit images into fuelings
-
 Segments
 
 
@@ -92,3 +90,51 @@ app.post('/upload', (req, res) => {
 	})
 	req.pipe(bb)
 }) -->
+
+
+
+fuk deploy this guy 😇
+
+# Deploy steps
+- tar the server directory:
+```
+tar -zcvf server.tgz server
+```
+
+- scp to droplet
+```
+scp server.tgz root@143.198.190.93:~
+```
+
+- ssh into droplet
+```
+ssh root@143.198.190.93
+```
+- Create database on droplet
+- start tmux session
+- Set secrets in env vars
+
+export DB_PASSWORD=
+export TWILIO_API_TOKEN=
+export OPENAI_API_KEY=
+
+- rename old server directory
+- untar server.tgz
+- create schema in db
+- kill old server
+- Accept downtime
+- start new server
+---- Reverse proxy?
+
+- add webhook to server in twilio
+
+
+# Dumb database stuff
+
+su - postgres
+psql
+
+CREATE DATABASE mpg_calc;
+
+CREATE USER MPGCALC WITH PASSWORD '~put the p@ZZwrd here~';
+GRANT ALL ON SCHEMA public TO mpgcalc;

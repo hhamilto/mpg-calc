@@ -57,7 +57,6 @@ const classify = async (image_url) => {
 }
 
 const extractGallons = async (image_url) => {
-
 	const response = await axios.request({
 		method: 'post',
 		url: 'https://api.openai.com/v1/chat/completions',
@@ -94,12 +93,11 @@ const extractGallons = async (image_url) => {
 	})
 	console.log(response.data.choices)
 	const content = response.data.choices[0].message.content
-	return Number(content.replace(/[^\d.]/g,''))
+	return Number(content.replace(/[^\d.]/g, ''))
 }
 
 // FIXME: Crop the image first for better accuracy
 const extractMileage = async (image_url) => {
-
 	const response = await axios.request({
 		method: 'post',
 		url: 'https://api.openai.com/v1/chat/completions',
@@ -113,7 +111,7 @@ const extractMileage = async (image_url) => {
 				{
 					role: 'system',
 					content:
-						'You are part of a system to read the total mileage from a picture of a car\'s odometer. You respond using only the numbers on the odometer indicating the total mileage of the vehicle.',
+						"You are part of a system to read the total mileage from a picture of a car's odometer. You respond using only the numbers on the odometer indicating the total mileage of the vehicle.",
 				},
 				{
 					role: 'user',
@@ -136,7 +134,7 @@ const extractMileage = async (image_url) => {
 	})
 	console.log(response.data.choices)
 	const content = response.data.choices[0].message.content
-	return Number(content.replace(/\D/g,''))
+	return Number(content.replace(/\D/g, ''))
 }
 
 module.exports = {
