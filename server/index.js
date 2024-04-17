@@ -182,32 +182,35 @@ app.get('/:phoneNumber', async (req, res) => {
 		timeline.push(fuelings[i])
 	}
 
+	let phoneNumberFormatted = rows[0].phone_number.substring(2)
+	phoneNumberFormatted = formatPhoneNumber(phoneNumberFormatted)
 	// Sorry
 	res.header('Content-Type', 'text/html')
 
 	res.write(`
 		<html>
 		<head>
-		<title> Mileage for ${req.params.phoneNumber}</title>
+		<title> Mileage for ${phoneNumberFormatted}</title>
 		<script src="https://kit.fontawesome.com/8307bbcf03.js" crossorigin="anonymous"></script>
 		<script src="https://cdn.tailwindcss.com"></script>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		</head>
 		<body>
 		<div class="m-4">
-			<i class="fa-solid fa-user"></i> ${req.params.phoneNumber} <span class="text-slate-500"> Mileage Report</span>
+			<h1 class="text-xl"> <span class="text-slate-900"> Mileage Report</span></h1>
+			<i class="fa-solid fa-phone mr-1 text-slate-500"></i> ${phoneNumberFormatted}
 		</div>
 		<div class="flex flex-col m-4 mt-6" id="timeline">`)
 
 	for (let i = 0; i < timeline.length; i++) {
 		const event = timeline[i]
 		if (i != 0) {
-			res.write(`<div class="bg-slate-200 w-1 h-12"></div>`)
+			res.write(`<div class="bg-slate-200 w-1 h-12 ml-1 ${i%2?'rounded-t':'rounded-b'}"></div>`)
 		}
 		res.write(`<div class="flex">`)
 		if (event.type == 'segment') {
 			res.write(`
-			<div class="bg-slate-200 w-1 h-12"></div>
+			<div class="bg-slate-200 w-1 h-12 ml-1"></div>
 			`)
 		}
 
@@ -215,9 +218,9 @@ app.get('/:phoneNumber', async (req, res) => {
 			<div class="pr-2 flex items-center">`)
 
 		if (event.type == 'fueling') {
-			res.write(`<i class="fa-solid fa-gas-pump block"></i>`)
+			res.write(`<i class="fa-solid fa-gas-pump block text-slate-500"></i>`)
 		} else if (event.type == 'segment') {
-			res.write(`<i class="fa-solid fa-car pl-2 block"></i>`)
+			res.write(`<i class="fa-solid fa-car pl-2 block text-slate-500"></i>`)
 		}
 
 		res.write(`
@@ -275,4 +278,13 @@ const getImagesForPhone = async (phoneNumber) => {
 		return rows.rows
 	}
 	return null
+}
+
+function formatPhoneNumber(phoneNumberString) {
+  var cleaned = ('' + phoneNumberString).replace(/\D/g, '');
+  var match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
+  if (match) {
+    return '(' + match[1] + ') ' + match[2] + '-' + match[3];
+  }
+  return null;
 }
