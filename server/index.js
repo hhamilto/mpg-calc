@@ -140,11 +140,9 @@ app.post('/webhooks/twilio', async (req, res) => {
 
 app.get('/:phoneNumber', async (req, res) => {
 	console.log(req.params)
-	const rows = await pool.query(
-		'SELECT id, class, mileage, gallons, inserted_at, updated_at, fueling_id, phone_number FROM images WHERE phone_number = $1 AND fueling_id IS NOT NULL',
-		['+' + req.params.phoneNumber]
-	)
-	if (rows.rows.length == 0) {
+	// TODO: Pagination
+	const rows = await getImagesForPhone(req.params.phoneNumber)
+	if (rows.length == 0) {
 		res.status(404)
 		res.write('Unable to find mileage for ' + req.params.phoneNumber)
 		res.end()
@@ -152,7 +150,7 @@ app.get('/:phoneNumber', async (req, res) => {
 	}
 	// Step 1 group into fuelings
 	const fuelingObj = {}
-	for (const image of rows.rows) {
+	for (const image of rows) {
 		if (!fuelingObj[image.fueling_id]) {
 			fuelingObj[image.fueling_id] = []
 		}
@@ -207,13 +205,13 @@ app.get('/:phoneNumber', async (req, res) => {
 			res.write(`<div class="bg-slate-200 w-1 h-12"></div>`)
 		}
 		res.write(`<div class="flex">`)
-			if (event.type == 'segment') {
-				res.write(`
+		if (event.type == 'segment') {
+			res.write(`
 			<div class="bg-slate-200 w-1 h-12"></div>
 			`)
-			}
+		}
 
-				res.write(`
+		res.write(`
 			<div class="pr-2 flex items-center">`)
 
 		if (event.type == 'fueling') {
@@ -225,13 +223,16 @@ app.get('/:phoneNumber', async (req, res) => {
 		res.write(`
 			</div><div>${capitalize(event.type)}<br/>`)
 		if (event.type == 'fueling') {
-			res.write(`<span class="text-slate-500">Gallons: ${event.gallons} &bull; Odo: ${numberWithCommas(event.mileage)}</span>`)
+			res.write(
+				`<span class="text-slate-500">Gallons: ${event.gallons} &bull; Odo: ${numberWithCommas(event.mileage)}</span>`
+			)
 		} else if (event.type == 'segment') {
-			res.write(`<span class="text-slate-500">MPG: ${Math.round(event.mpg*10)/10} &bull; Distance: ${event.distance} mi</span>`)
+			res.write(
+				`<span class="text-slate-500">MPG: ${Math.round(event.mpg * 10) / 10} &bull; Distance: ${event.distance} mi</span>`
+			)
 		}
 		res.write(`</div>
 			</div>`)
-
 	}
 
 	res.write(`
@@ -249,11 +250,29 @@ app.listen(PORT, (err) => {
 	console.log('listening on ' + PORT)
 })
 
-
 function capitalize(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
+	return string.charAt(0).toUpperCase() + string.slice(1)
 }
 
 function numberWithCommas(x) {
-    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+	return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const getImagesForPhone = async (phoneNumber) => {
+	phoneNumber = phoneNumber.replace(/\D/g, '')
+	let rows = await pool.query(
+		'SELECT id, class, mileage, gallons, inserted_at, updated_at, fueling_id, phone_number FROM images WHERE phone_number = $1 AND fueling_id IS NOT NULL',
+		['+' + phoneNumber]
+	)
+	if (rows.rows.length > 0) {
+		return rows.rows
+	}
+	rows = await pool.query(
+		'SELECT id, class, mileage, gallons, inserted_at, updated_at, fueling_id, phone_number FROM images WHERE phone_number = $1 AND fueling_id IS NOT NULL',
+		['+1' + phoneNumber]
+	)
+	if (rows.rows.length > 0) {
+		return rows.rows
+	}
+	return null
 }
