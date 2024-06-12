@@ -1,7 +1,7 @@
 'use strict'
 const axios = require('axios')
 
-const OPENAI_API_KEY = process.env['OPENAI_API_KEY']
+const OPENAI_API_KEY = process.env['OPENAI_API_KEY'] || (()=>{throw new Error('Missing OPENAI_API_KEY')})()
 
 const PUMP = 'PUMP'
 const ODOMETER = 'ODOMETER'
@@ -16,7 +16,7 @@ const classify = async (image_url) => {
 			Authorization: `Bearer ${OPENAI_API_KEY}`,
 		},
 		data: {
-			model: 'gpt-4-turbo',
+			model: 'gpt-4o',
 			messages: [
 				{
 					role: 'system',
@@ -65,7 +65,7 @@ const extractGallons = async (image_url) => {
 			Authorization: `Bearer ${OPENAI_API_KEY}`,
 		},
 		data: {
-			model: 'gpt-4-turbo',
+			model: 'gpt-4o',
 			messages: [
 				{
 					role: 'system',
@@ -106,7 +106,7 @@ const extractMileage = async (image_url) => {
 			Authorization: `Bearer ${OPENAI_API_KEY}`,
 		},
 		data: {
-			model: 'gpt-4-turbo',
+			model: 'gpt-4o',
 			messages: [
 				{
 					role: 'system',
@@ -134,7 +134,7 @@ const extractMileage = async (image_url) => {
 	})
 	console.log(response.data.choices)
 	const content = response.data.choices[0].message.content
-	return Number(content.replace(/\D/g, ''))
+	return Number(content.replace(/[^0-9.]/g, ''))
 }
 
 module.exports = {

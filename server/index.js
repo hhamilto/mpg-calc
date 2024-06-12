@@ -4,22 +4,24 @@ const busboy = require('busboy')
 const axios = require('axios')
 const pg = require('pg')
 
-const pool = new pg.Pool({
-	host: 'localhost',
-	database: 'mpg_calc',
-	user: 'mpgcalc',
-	password: process.env['DB_PASSWORD'],
-	max: 20,
-	idleTimeoutMillis: 30000,
-	connectionTimeoutMillis: 2000,
-})
 
 const imageExtractor = require('./image-extractor.js')
 
 const PORT = 8002
 
 const TWILIO_ACCOUNT_SID = 'AC826d0de709f5a8b8aabd6ecc1b7d1ec6'
-const TWILIO_API_TOKEN = process.env['TWILIO_API_TOKEN']
+const TWILIO_API_TOKEN = process.env['TWILIO_API_TOKEN']  || (()=> {throw new Error('Missing TWILIO_API_TOKEN')})()
+const DB_PASSWORD = process.env['DB_PASSWORD'] ||  (()=>{throw new Error('Missing DB_PASSWORD')})()
+
+const pool = new pg.Pool({
+	host: 'localhost',
+	database: 'mpg_calc',
+	user: 'mpgcalc',
+	password: DB_PASSWORD,
+	max: 20,
+	idleTimeoutMillis: 30000,
+	connectionTimeoutMillis: 2000,
+})
 
 const app = express()
 
@@ -59,9 +61,11 @@ app.post('/webhooks/twilio', async (req, res) => {
 	const image_url = `data:image/jpeg;base64,${base64Image}`
 
 	const type = await imageExtractor.classify(image_url)
+	let smsResponseMessageText = "If you see this, something has gone wrong"
 	if (type == imageExtractor.ODOMETER) {
 		console.log('classified as odometer')
-		const mileage = await imageExtractor.extractMileage(image_url)
+		let mileage = await imageExtractor.extractMileage(image_url)
+		mileage = Math.floor(mileage)
 		console.log('mileage', mileage)
 		// Check to see if there are any unbound pumps
 		const rows = await pool.query(
@@ -76,6 +80,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 				['odometer', mileage, req.body.From]
 			)
 			console.log(result)
+			smsResponseMessageText = 'Thanks for the odometer pic, send the pump!'
 		} else {
 			const [{ id: pump_image_id }] = rows.rows
 			// TODO txn
@@ -91,6 +96,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 				[fueling_id, pump_image_id]
 			)
 			console.log(result)
+			smsResponseMessageText = `Matched odometer with the pump, view results at https://textmpg.com/${req.body.From}`
 		}
 	}
 
@@ -111,6 +117,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 				['pump', gallons, req.body.From]
 			)
 			console.log(result)
+			smsResponseMessageText = 'Thanks for the pump pic 😉 send the odometer!'
 		} else {
 			const [{ id: odometer_image_id }] = rows.rows
 			// TODO txn
@@ -126,6 +133,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 				[fueling_id, odometer_image_id]
 			)
 			console.log(result)
+			smsResponseMessageText = `Matched pump with the odometer, view results at https://textmpg.com/${req.body.From}`
+
 		}
 	}
 	res.status(200)
@@ -133,8 +142,38 @@ app.post('/webhooks/twilio', async (req, res) => {
 	res.write(`
 		<?xml version="1.0" encoding="UTF-8"?>
 		<Response>
-		    <Message>We got your message, thank you!</Message>
+		    <Message>${smsResponseMessageText}</Message>
 		</Response>`)
+	res.end()
+})
+
+app.get('/', async (req, res) => {
+	// Sorry
+	res.header('Content-Type', 'text/html')
+
+	res.write(`
+		<html>
+		<head>
+		<title> Track your gas mileage easily</title>
+		<script src="https://kit.fontawesome.com/8307bbcf03.js" crossorigin="anonymous"></script>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		</head>
+		<body>
+		<div class="m-4">
+			<p>
+				Track you gas mileage by texting pictures of your odometer and gas pump after you fill up!
+			</p>
+			<p>
+				Text START to  (906) 256-6929 to begin.
+			</p>
+			<p>
+				© 2024 textMPG
+			</p>
+		</div>
+		</body>
+		</html>`
+		)
 	res.end()
 })
 
@@ -163,7 +202,8 @@ app.get('/:phoneNumber', async (req, res) => {
 			type: 'fueling',
 		}
 	})
-
+	fuelings.sort((f1, f2) => f1.mileage - f2.mileage)
+	console.log(fuelings)
 	// Step 2 Calculate segments + mpg per segment
 	const timeline = []
 	for (let i = 0; i < fuelings.length; i++) {
@@ -181,6 +221,8 @@ app.get('/:phoneNumber', async (req, res) => {
 		})
 		timeline.push(fuelings[i])
 	}
+
+	timeline.reverse()
 
 	let phoneNumberFormatted = rows[0].phone_number.substring(2)
 	phoneNumberFormatted = formatPhoneNumber(phoneNumberFormatted)
