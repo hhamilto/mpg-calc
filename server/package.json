@@ -1,5 +1,5 @@
 {
-	"name": "mpg-calc-server",
+	"name": "text-mpg-server",
 	"version": "1.0.0",
 	"description": "",
 	"main": "index.js",
@@ -12,7 +12,8 @@
 	"author": "",
 	"license": "ISC",
 	"devDependencies": {
-		"nodemon": "^3.1.0"
+		"nodemon": "^3.1.0",
+		"prettier": "^3.5.3"
 	},
 	"dependencies": {
 		"axios": "^1.6.8",

@@ -1,7 +1,11 @@
 'use strict'
 const axios = require('axios')
 
-const OPENAI_API_KEY = process.env['OPENAI_API_KEY'] || (()=>{throw new Error('Missing OPENAI_API_KEY')})()
+const OPENAI_API_KEY =
+	process.env['OPENAI_API_KEY'] ||
+	(() => {
+		throw new Error('Missing OPENAI_API_KEY')
+	})()
 
 const PUMP = 'PUMP'
 const ODOMETER = 'ODOMETER'
