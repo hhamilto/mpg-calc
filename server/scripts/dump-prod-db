@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -eou pipefail
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+cd "$SCRIPT_DIR/../.."
+
+ssh root@143.198.190.93 "PGPASSWORD=$PROD_PGPASSWORD pg_dump -h localhost -U mpgcalc mpg_calc" > tmp/prod-dump.sql
