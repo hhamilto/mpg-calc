@@ -338,7 +338,7 @@ const getImagesForPhone = async (phoneNumber) => {
 	if (rows.rows.length > 0) {
 		return rows.rows
 	}
-	return null
+	return []
 }
 
 function formatPhoneNumber(phoneNumberString) {
