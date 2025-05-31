@@ -74,6 +74,10 @@ app.post('/webhooks/twilio', async (req, res) => {
 		let mileage = await imageExtractor.extractMileage(image_url)
 		mileage = Math.floor(mileage)
 		console.log('mileage', mileage)
+		
+		// Find the best matching car for this odometer reading
+		const carId = await findBestMatchingCar(req.body.From, mileage)
+		
 		// Check to see if there are any unbound pumps
 		const rows = await pool.query(
 			"SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
@@ -83,8 +87,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 		if (rows.rows.length == 0) {
 			// Note: insert new
 			let result = await pool.query(
-				'INSERT INTO images (class, mileage, phone_number) VALUES ($1, $2, $3)',
-				['odometer', mileage, req.body.From]
+				'INSERT INTO images (class, mileage, phone_number, car_id) VALUES ($1, $2, $3, $4)',
+				['odometer', mileage, req.body.From, carId]
 			)
 			console.log(result)
 			smsResponseMessageText =
@@ -94,8 +98,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 			// TODO txn
 			const fueling_id = crypto.randomUUID()
 			let result = await pool.query(
-				'INSERT INTO images (class, mileage, fueling_id, phone_number) VALUES ($1, $2, $3, $4)',
-				['odometer', mileage, fueling_id, req.body.From]
+				'INSERT INTO images (class, mileage, fueling_id, phone_number, car_id) VALUES ($1, $2, $3, $4, $5)',
+				['odometer', mileage, fueling_id, req.body.From, carId]
 			)
 			console.log(result)
 
@@ -348,4 +352,51 @@ function formatPhoneNumber(phoneNumberString) {
 		return '(' + match[1] + ') ' + match[2] + '-' + match[3]
 	}
 	return null
+}
+
+async function findBestMatchingCar(phoneNumber, newMileage) {
+	// Get all cars for this phone number
+	const carsResult = await pool.query(
+		'SELECT id FROM cars WHERE phone_number = $1',
+		[phoneNumber]
+	)
+	
+	if (carsResult.rows.length === 0) {
+		throw new Error('No cars found for this phone number')
+	}
+	
+	if (carsResult.rows.length === 1) {
+		return carsResult.rows[0].id
+	}
+	
+	// Get the most recent odometer reading for each car
+	const carDistances = []
+	for (const car of carsResult.rows) {
+		const lastOdometerResult = await pool.query(
+			'SELECT mileage FROM images WHERE phone_number = $1 AND car_id = $2 AND class = $3 ORDER BY inserted_at DESC LIMIT 1',
+			[phoneNumber, car.id, 'odometer']
+		)
+		
+		if (lastOdometerResult.rows.length > 0) {
+			const lastMileage = lastOdometerResult.rows[0].mileage
+			const distance = Math.abs(newMileage - lastMileage)
+			carDistances.push({ carId: car.id, distance, lastMileage })
+		}
+	}
+	
+	if (carDistances.length === 0) {
+		// No previous odometer readings, use first car
+		return carsResult.rows[0].id
+	}
+	
+	// Find the car with the smallest distance
+	carDistances.sort((a, b) => a.distance - b.distance)
+	const closestCar = carDistances[0]
+	
+	// Error if the closest car is more than 1000 miles away
+	if (closestCar.distance > 1000) {
+		throw new Error(`New odometer reading ${newMileage} is ${closestCar.distance} miles away from closest car's last reading of ${closestCar.lastMileage}. Maximum allowed distance is 1000 miles.`)
+	}
+	
+	return closestCar.carId
 }
