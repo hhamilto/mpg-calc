@@ -1,2 +1,0 @@
--- Make car_id NOT NULL
-ALTER TABLE images ALTER COLUMN car_id SET NOT NULL;
