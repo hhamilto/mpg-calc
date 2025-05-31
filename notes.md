@@ -141,11 +141,24 @@ tar -zxvf server.tgz server/
 - YOU'RE DONE!
 
 # Dumb database stuff
-
+```sql
 su - postgres
 psql
 
 CREATE DATABASE mpg_calc;
 
-CREATE USER MPGCALC WITH PASSWORD '~put the p@ZZwrd here~';
+CREATE USER mpgcalc WITH PASSWORD 'asdfasdf';
 GRANT ALL ON SCHEMA public TO mpgcalc;
+
+-- might need this:
+GRANT USAGE ON SCHEMA public TO your_role;
+GRANT CREATE ON SCHEMA public TO your_role;
+-- if you need to read/write existing tables:
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ALL TABLES IN SCHEMA public
+  TO your_role;
+-- to cover tables created in the future:
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLES TO your_role;
+```

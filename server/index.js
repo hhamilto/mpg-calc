@@ -74,10 +74,10 @@ app.post('/webhooks/twilio', async (req, res) => {
 		let mileage = await imageExtractor.extractMileage(image_url)
 		mileage = Math.floor(mileage)
 		console.log('mileage', mileage)
-		
+
 		// Find the best matching car for this odometer reading
 		const carId = await findBestMatchingCar(req.body.From, mileage)
-		
+
 		// Check to see if there are any unbound pumps
 		const rows = await pool.query(
 			"SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
@@ -164,11 +164,13 @@ app.get('/', async (req, res) => {
 	res.header('Content-Type', 'text/html')
 
 	res.write(`
+		<!DOCTYPE html>
 		<html>
 		<head>
 		<title> Track your gas mileage easily</title>
 		<script src="https://kit.fontawesome.com/8307bbcf03.js" crossorigin="anonymous"></script>
 		<script src="https://cdn.tailwindcss.com"></script>
+		<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		</head>
 		<body>
@@ -205,41 +207,67 @@ app.get('/:phoneNumber', async (req, res) => {
 		res.end()
 		return
 	}
-	// Step 1 group into fuelings
-	const fuelingObj = {}
+	// Step 1: Group by car first
+	const carGroups = {}
 	for (const image of rows) {
-		if (!fuelingObj[image.fueling_id]) {
-			fuelingObj[image.fueling_id] = []
+		if (!carGroups[image.car_id]) {
+			carGroups[image.car_id] = {
+				carInfo: {
+					id: image.car_id,
+					make: image.make,
+					model: image.model,
+					year: image.year,
+				},
+				images: [],
+			}
 		}
-		fuelingObj[image.fueling_id].push(image)
-	}
-	const fuelings = Object.values(fuelingObj).map(([image1, image2]) => {
-		return {
-			mileage: image1.mileage || image2.mileage,
-			gallons: image1.gallons || image2.gallons,
-			type: 'fueling',
-		}
-	})
-	fuelings.sort((f1, f2) => f1.mileage - f2.mileage)
-	// Step 2 Calculate segments + mpg per segment
-	const timeline = []
-	for (let i = 0; i < fuelings.length; i++) {
-		if (i == 0) {
-			timeline.push(fuelings[i])
-			continue
-		}
-		const distance = fuelings[i].mileage - fuelings[i - 1].mileage
-		const gallons = fuelings[i].gallons
-		const mpg = distance / gallons
-		timeline.push({
-			type: 'segment',
-			mpg: mpg,
-			distance: distance,
-		})
-		timeline.push(fuelings[i])
+		carGroups[image.car_id].images.push(image)
 	}
 
-	timeline.reverse()
+	// Step 2: Process each car's timeline
+	const cars = []
+	for (const carGroup of Object.values(carGroups)) {
+		// Group into fuelings for this car
+		const fuelingObj = {}
+		for (const image of carGroup.images) {
+			if (!fuelingObj[image.fueling_id]) {
+				fuelingObj[image.fueling_id] = []
+			}
+			fuelingObj[image.fueling_id].push(image)
+		}
+		const fuelings = Object.values(fuelingObj).map(([image1, image2]) => {
+			return {
+				mileage: image1.mileage || image2.mileage,
+				gallons: image1.gallons || image2.gallons,
+				type: 'fueling',
+			}
+		})
+		fuelings.sort((f1, f2) => f1.mileage - f2.mileage)
+
+		// Calculate segments + mpg per segment for this car
+		const timeline = []
+		for (let i = 0; i < fuelings.length; i++) {
+			if (i == 0) {
+				timeline.push(fuelings[i])
+				continue
+			}
+			const distance = fuelings[i].mileage - fuelings[i - 1].mileage
+			const gallons = fuelings[i].gallons
+			const mpg = distance / gallons
+			timeline.push({
+				type: 'segment',
+				mpg: mpg,
+				distance: distance,
+			})
+			timeline.push(fuelings[i])
+		}
+		timeline.reverse()
+
+		cars.push({
+			...carGroup.carInfo,
+			timeline: timeline,
+		})
+	}
 
 	let phoneNumberFormatted = rows[0].phone_number.substring(2)
 	phoneNumberFormatted = formatPhoneNumber(phoneNumberFormatted)
@@ -247,65 +275,88 @@ app.get('/:phoneNumber', async (req, res) => {
 	res.header('Content-Type', 'text/html')
 
 	res.write(`
+		<!DOCTYPE html>
 		<html>
 		<head>
 		<title> Mileage for ${phoneNumberFormatted}</title>
 		<script src="https://kit.fontawesome.com/8307bbcf03.js" crossorigin="anonymous"></script>
 		<script src="https://cdn.tailwindcss.com"></script>
+		<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		</head>
 		<body>
 		<div class="m-4">
 			<h1 class="text-xl"> <span class="text-slate-900"> Mileage Report</span></h1>
 			<i class="fa-solid fa-phone mr-1 text-slate-500"></i> ${phoneNumberFormatted}
-		</div>
-		<div class="flex flex-col m-4 mt-6" id="timeline">`)
+		</div>`)
 
-	for (let i = 0; i < timeline.length; i++) {
-		const event = timeline[i]
-		if (i != 0) {
-			res.write(
-				`<div class="bg-slate-200 w-1 h-12 ml-1 ${i % 2 ? 'rounded-t' : 'rounded-b'}"></div>`
-			)
-		}
-		res.write(`<div class="flex">`)
-		if (event.type == 'segment') {
+	for (let carIndex = 0; carIndex < cars.length; carIndex++) {
+		const car = cars[carIndex]
+		const carName = [car.year, car.make, car.model]
+			.filter(Boolean)
+			.join(' ')
+
+		res.write(`
+		<div x-data="{ open: ${carIndex === 0 ? 'true' : 'false'} }" class="m-4 border border-slate-200 rounded-lg">
+			<div class="bg-slate-50 p-4 cursor-pointer" @click="open = !open">
+				<div class="flex items-center justify-between">
+					<h2 class="text-lg font-medium">
+						<i class="fa-solid fa-car mr-2 text-slate-600"></i>
+						${carName || `Car ${car.id}`}
+					</h2>
+					<i class="fa-solid fa-chevron-down transform transition-transform" :class="{ 'rotate-180': open }"></i>
+				</div>
+			</div>
+			<div x-show="open" x-transition class="p-4">
+				<div class="flex flex-col" id="timeline-${car.id}">`)
+
+		for (let i = 0; i < car.timeline.length; i++) {
+			const event = car.timeline[i]
+			if (i != 0) {
+				res.write(
+					`<div class="bg-slate-200 w-1 h-12 ml-1 ${i % 2 ? 'rounded-t' : 'rounded-b'}"></div>`
+				)
+			}
+			res.write(`<div class="flex">`)
+			if (event.type == 'segment') {
+				res.write(`
+				<div class="bg-slate-200 w-1 h-12 ml-1"></div>
+				`)
+			}
+
 			res.write(`
-			<div class="bg-slate-200 w-1 h-12 ml-1"></div>
-			`)
+				<div class="pr-2 flex items-center">`)
+
+			if (event.type == 'fueling') {
+				res.write(
+					`<i class="fa-solid fa-gas-pump block text-slate-500"></i>`
+				)
+			} else if (event.type == 'segment') {
+				res.write(
+					`<i class="fa-solid fa-car pl-2 block text-slate-500"></i>`
+				)
+			}
+
+			res.write(`
+				</div><div>${capitalize(event.type)}<br/>`)
+			if (event.type == 'fueling') {
+				res.write(
+					`<span class="text-slate-500">Gallons: ${event.gallons} &bull; Odo: ${numberWithCommas(event.mileage)}</span>`
+				)
+			} else if (event.type == 'segment') {
+				res.write(
+					`<span class="text-slate-500">MPG: ${Math.round(event.mpg * 10) / 10} &bull; Distance: ${event.distance} mi</span>`
+				)
+			}
+			res.write(`</div>
+				</div>`)
 		}
 
 		res.write(`
-			<div class="pr-2 flex items-center">`)
-
-		if (event.type == 'fueling') {
-			res.write(
-				`<i class="fa-solid fa-gas-pump block text-slate-500"></i>`
-			)
-		} else if (event.type == 'segment') {
-			res.write(
-				`<i class="fa-solid fa-car pl-2 block text-slate-500"></i>`
-			)
-		}
-
-		res.write(`
-			</div><div>${capitalize(event.type)}<br/>`)
-		if (event.type == 'fueling') {
-			res.write(
-				`<span class="text-slate-500">Gallons: ${event.gallons} &bull; Odo: ${numberWithCommas(event.mileage)}</span>`
-			)
-		} else if (event.type == 'segment') {
-			res.write(
-				`<span class="text-slate-500">MPG: ${Math.round(event.mpg * 10) / 10} &bull; Distance: ${event.distance} mi</span>`
-			)
-		}
-		res.write(`</div>
-			</div>`)
+				</div>
+			</div>
+		</div>`)
 	}
-
-	res.write(`
-		</div>
-		`)
 
 	res.write('</body></html>')
 	res.end()
@@ -329,14 +380,22 @@ function numberWithCommas(x) {
 const getImagesForPhone = async (phoneNumber) => {
 	phoneNumber = phoneNumber.replace(/\D/g, '')
 	let rows = await pool.query(
-		'SELECT id, class, mileage, gallons, inserted_at, updated_at, fueling_id, phone_number FROM images WHERE phone_number = $1 AND fueling_id IS NOT NULL',
+		`SELECT i.id, i.class, i.mileage, i.gallons, i.inserted_at, i.updated_at, i.fueling_id, i.phone_number, i.car_id,
+		        c.make, c.model, c.year
+		 FROM images i
+		 INNER JOIN cars c ON i.car_id = c.id
+		 WHERE i.phone_number = $1 AND i.fueling_id IS NOT NULL`,
 		['+' + phoneNumber]
 	)
 	if (rows.rows.length > 0) {
 		return rows.rows
 	}
 	rows = await pool.query(
-		'SELECT id, class, mileage, gallons, inserted_at, updated_at, fueling_id, phone_number FROM images WHERE phone_number = $1 AND fueling_id IS NOT NULL',
+		`SELECT i.id, i.class, i.mileage, i.gallons, i.inserted_at, i.updated_at, i.fueling_id, i.phone_number, i.car_id,
+		        c.make, c.model, c.year
+		 FROM images i
+		 INNER JOIN cars c ON i.car_id = c.id
+		 WHERE i.phone_number = $1 AND i.fueling_id IS NOT NULL`,
 		['+1' + phoneNumber]
 	)
 	if (rows.rows.length > 0) {
@@ -360,15 +419,15 @@ async function findBestMatchingCar(phoneNumber, newMileage) {
 		'SELECT id FROM cars WHERE phone_number = $1',
 		[phoneNumber]
 	)
-	
+
 	if (carsResult.rows.length === 0) {
 		throw new Error('No cars found for this phone number')
 	}
-	
+
 	if (carsResult.rows.length === 1) {
 		return carsResult.rows[0].id
 	}
-	
+
 	// Get the most recent odometer reading for each car
 	const carDistances = []
 	for (const car of carsResult.rows) {
@@ -376,27 +435,29 @@ async function findBestMatchingCar(phoneNumber, newMileage) {
 			'SELECT mileage FROM images WHERE phone_number = $1 AND car_id = $2 AND class = $3 ORDER BY inserted_at DESC LIMIT 1',
 			[phoneNumber, car.id, 'odometer']
 		)
-		
+
 		if (lastOdometerResult.rows.length > 0) {
 			const lastMileage = lastOdometerResult.rows[0].mileage
 			const distance = Math.abs(newMileage - lastMileage)
 			carDistances.push({ carId: car.id, distance, lastMileage })
 		}
 	}
-	
+
 	if (carDistances.length === 0) {
 		// No previous odometer readings, use first car
 		return carsResult.rows[0].id
 	}
-	
+
 	// Find the car with the smallest distance
 	carDistances.sort((a, b) => a.distance - b.distance)
 	const closestCar = carDistances[0]
-	
+
 	// Error if the closest car is more than 1000 miles away
 	if (closestCar.distance > 1000) {
-		throw new Error(`New odometer reading ${newMileage} is ${closestCar.distance} miles away from closest car's last reading of ${closestCar.lastMileage}. Maximum allowed distance is 1000 miles.`)
+		throw new Error(
+			`New odometer reading ${newMileage} is ${closestCar.distance} miles away from closest car's last reading of ${closestCar.lastMileage}. Maximum allowed distance is 1000 miles.`
+		)
 	}
-	
+
 	return closestCar.carId
 }
