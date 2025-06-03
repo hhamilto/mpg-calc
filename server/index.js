@@ -80,7 +80,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 
 		// Check to see if there are any unbound pumps
 		const rows = await pool.query(
-			"SELECT id FROM images WHERE class = 'pump' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
+			"SELECT id, car_id FROM images WHERE class = 'pump' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
 			[req.body.From]
 		)
 		console.log(rows)
@@ -94,7 +94,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 			smsResponseMessageText =
 				'Thanks for the odometer pic, send the pump!'
 		} else {
-			const [{ id: pump_image_id }] = rows.rows
+			const [{ id: pump_image_id, car_id: car_id }] = rows.rows
 			// TODO txn
 			const fueling_id = crypto.randomUUID()
 			let result = await pool.query(
@@ -104,8 +104,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 			console.log(result)
 
 			result = await pool.query(
-				'UPDATE images SET fueling_id = $1 WHERE id = $2',
-				[fueling_id, pump_image_id]
+				'UPDATE images SET fueling_id = $1, car_id = $2, WHERE id = $3',
+				[fueling_id, car_id, pump_image_id]
 			)
 			console.log(result)
 			smsResponseMessageText = `Matched odometer with the pump, view results at https://textmpg.com/${req.body.From}`
@@ -118,7 +118,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 		console.log('gallons', gallons)
 		// Check to see if there are any unbound odometers
 		const rows = await pool.query(
-			"SELECT id FROM images WHERE class = 'odometer' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
+			"SELECT id, car_id FROM images WHERE class = 'odometer' AND fueling_id IS NULL AND phone_number = $1 ORDER BY inserted_at desc LIMIT 1",
 			[req.body.From]
 		)
 		console.log(rows)
@@ -132,12 +132,12 @@ app.post('/webhooks/twilio', async (req, res) => {
 			smsResponseMessageText =
 				'Thanks for the pump pic 😉 send the odometer!'
 		} else {
-			const [{ id: odometer_image_id }] = rows.rows
+			const [{ id: odometer_image_id, car_id: car_id }] = rows.rows
 			// TODO txn
 			const fueling_id = crypto.randomUUID()
 			let result = await pool.query(
-				'INSERT INTO images (class, gallons, fueling_id, phone_number) VALUES ($1, $2, $3, $4)',
-				['pump', gallons, fueling_id, req.body.From]
+				'INSERT INTO images (class, gallons, fueling_id, phone_number) VALUES ($1, $2, $3, $4, $5)',
+				['pump', gallons, fueling_id, car_id, req.body.From]
 			)
 			console.log(result)
 
