@@ -104,7 +104,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 			console.log(result)
 
 			result = await pool.query(
-				'UPDATE images SET fueling_id = $1, car_id = $2, WHERE id = $3',
+				'UPDATE images SET fueling_id = $1, car_id = $2 WHERE id = $3',
 				[fueling_id, car_id, pump_image_id]
 			)
 			console.log(result)
@@ -142,8 +142,8 @@ app.post('/webhooks/twilio', async (req, res) => {
 			console.log(result)
 
 			result = await pool.query(
-				'UPDATE images SET fueling_id = $1 WHERE id = $2',
-				[fueling_id, odometer_image_id]
+				'UPDATE images SET fueling_id = $1, car_id = $2 WHERE id = $3',
+				[fueling_id, car_id, odometer_image_id]
 			)
 			console.log(result)
 			smsResponseMessageText = `Matched pump with the odometer, view results at https://textmpg.com/${req.body.From}`

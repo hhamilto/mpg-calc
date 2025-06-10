@@ -148,17 +148,18 @@ psql
 CREATE DATABASE mpg_calc;
 
 CREATE USER mpgcalc WITH PASSWORD 'asdfasdf';
+-- might need to reconnect to the new db and then run this:
 GRANT ALL ON SCHEMA public TO mpgcalc;
 
--- might need this:
-GRANT USAGE ON SCHEMA public TO your_role;
-GRANT CREATE ON SCHEMA public TO your_role;
--- if you need to read/write existing tables:
-GRANT SELECT, INSERT, UPDATE, DELETE
-  ON ALL TABLES IN SCHEMA public
-  TO your_role;
--- to cover tables created in the future:
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE
-  ON TABLES TO your_role;
+-- -- might need this:
+-- GRANT USAGE ON SCHEMA public TO mpgcalc;
+-- GRANT CREATE ON SCHEMA public TO mpgcalc;
+-- -- if you need to read/write existing tables:
+-- GRANT SELECT, INSERT, UPDATE, DELETE
+--   ON ALL TABLES IN SCHEMA public
+--   TO mpgcalc;
+-- -- to cover tables created in the future:
+-- ALTER DEFAULT PRIVILEGES IN SCHEMA public
+--   GRANT SELECT, INSERT, UPDATE, DELETE
+--   ON TABLES TO mpgcalc;
 ```
