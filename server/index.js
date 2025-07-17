@@ -136,7 +136,7 @@ app.post('/webhooks/twilio', async (req, res) => {
 			// TODO txn
 			const fueling_id = crypto.randomUUID()
 			let result = await pool.query(
-				'INSERT INTO images (class, gallons, fueling_id, phone_number) VALUES ($1, $2, $3, $4, $5)',
+				'INSERT INTO images (class, gallons, fueling_id, car_id, phone_number) VALUES ($1, $2, $3, $4, $5)',
 				['pump', gallons, fueling_id, car_id, req.body.From]
 			)
 			console.log(result)
